@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Theme dùng cho ứng dụng -->
+    <style name="Theme.Tuan2" parent="android:Theme.Material.Light">
+        <!-- Cơ bản nhất, không dùng color attributes -->
+    </style>
+</resources>
