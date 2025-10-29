@@ -1,4 +1,4 @@
-package com.example.aco
+package com.example.thuattoan
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
@@ -27,6 +27,13 @@ import kotlin.math.*
 import kotlin.random.Random
 
 // --- Data Classes ---
+// Node
+// Mục tiêu: Biểu diễn một nút (đỉnh) trong đồ thị được dùng cho mô phỏng ACO.
+// Thuộc tính:
+// - id: chỉ số duy nhất của nút.
+// - position: tọa độ (Offset) dùng để vẽ và tính toán khoảng cách.
+// - isNest: true nếu nút là tổ (nguồn xuất phát của kiến).
+// - isFood: true nếu nút là nguồn thức ăn (mục tiêu).
 data class Node(
     val id: Int,
     var position: Offset,
@@ -34,6 +41,13 @@ data class Node(
     var isFood: Boolean = false
 )
 
+// Edge
+// Mục tiêu: Biểu diễn cạnh giữa hai nút, kèm theo lượng pheromone và khoảng cách.
+// Thuộc tính:
+// - from: id của nút bắt đầu.
+// - to: id của nút kết thúc.
+// - pheromone: lượng pheromone hiện tại trên cạnh (double), ảnh hưởng xác suất chọn cạnh.
+// - distance: chiều dài/chi phí cạnh, dùng trong thuật toán (visibility = 1/distance).
 data class Edge(
     val from: Int,
     val to: Int,
@@ -41,6 +55,19 @@ data class Edge(
     var distance: Double
 )
 
+// Ant
+// Mục tiêu: Lưu trạng thái của một kiến trong quá trình đi tìm thức ăn.
+// Thuộc tính:
+// - currentNode: id nút hiện tại của kiến.
+// - visitedNodes: danh sách các nút đã đi qua (dùng để cộng pheromone và kiểm tra đường đi).
+// - totalDistance: tổng khoảng cách đã đi bởi kiến (dùng để tính đóng góp pheromone).
+// - progress: phần trăm tiến độ giữa currentNode và targetNode (dùng cho animation).
+// - targetNode: nút đích hiện tại mà kiến đang di chuyển tới (-1 nếu không có).
+// - hasReachedFood: true nếu kiến đã đến thức ăn.
+// - isReturningToNest: (hiện chưa sử dụng nhiều) đánh dấu kiến đang quay về tổ.
+// - hasCompletedTour: đánh dấu kiến đã hoàn thành 1 tour hợp lệ.
+// - animationPhase: giá trị phụ trợ cho animation (chân, v.v.).
+// - trailPositions: danh sách vị trí để vẽ vết đi của kiến.
 data class Ant(
     var currentNode: Int,
     val visitedNodes: MutableList<Int> = mutableListOf(),
@@ -55,17 +82,39 @@ data class Ant(
 )
 
 // --- ACO Algorithm Class ---
+// ACOAlgorithm
+// Mục tiêu: Cài đặt các thành phần logic chính của Ant Colony Optimization dùng cho mô phỏng.
+// Công dụng các tham số của constructor:
+// - nodes: danh sách các Node (đồ thị cho thuật toán).
+// - edges: danh sách cạnh có thể chỉnh pheromone/độ dài.
+// - alpha: hệ số trọng số cho pheromone khi tính xác suất chọn cạnh.
+// - beta: hệ số trọng số cho visibility (1/distance) khi tính xác suất.
+// - evaporationRate: tỉ lệ bốc hơi pheromone mỗi vòng.
+// - pheromoneDeposit: hằng số cơ sở dùng để tính lượng pheromone một kiến đóng góp dựa theo tổng khoảng cách.
 class ACOAlgorithm(
     private val nodes: List<Node>,
     private val edges: MutableList<Edge>,
     private val alpha: Double = 1.0,
-    private val beta: Double = 5.0, // có thể chỉnh thành 3
+    private val beta: Double = 5.0,
     private val evaporationRate: Double = 0.3,
     private val pheromoneDeposit: Double = 100.0
 ) {
+    // bestPath / bestDistance giữ kết quả tốt nhất tìm được trong quá trình thuật toán.
+    // - bestPath: danh sách id các nút tạo thành đường tốt nhất (tối thiểu hóa tổng khoảng cách).
+    // - bestDistance: khoảng cách tốt nhất tương ứng (mặc định là Infinity).
     var bestPath: List<Int> = emptyList()
     var bestDistance: Double = Double.MAX_VALUE
 
+    // === findNextNode ===
+    // Mục tiêu: Với một kiến đang ở currentNode, tính xác suất và chọn nút tiếp theo để đi.
+    // Cách hoạt động:
+    // 1) Lấy các cạnh kề với currentNode và xác định các neighbor chưa được thăm.
+    // 2) Với mỗi neighbor, tính pheromone^alpha * (1/distance)^beta là heuristic cơ bản.
+    // 3) Thêm một thành phần ngẫu nhiên (randomBonus) khi kiến chưa đạt thức ăn => tăng tính khám phá.
+    // 4) Chuẩn hóa các giá trị thành xác suất và chọn theo phân phối rời rạc (roulette wheel).
+    // Trả về: id của nút được chọn, hoặc -1 nếu không còn neighbor chưa thăm.
+    // Lưu ý: Hàm này không cập nhật trạng thái ant; chỉ trả về lựa chọn tiếp theo.
+    // === End highlighted description ===
     fun findNextNode(ant: Ant, foodId: Int): Int {
         val current = ant.currentNode
         val availableEdges = edges.filter { it.from == current || it.to == current }
@@ -100,6 +149,16 @@ class ACOAlgorithm(
         return unvisitedNeighbors.lastOrNull() ?: -1
     }
 
+    // === updatePheromones ===
+    // Mục tiêu: Cập nhật lượng pheromone trên tất cả các cạnh theo 2 bước:
+    //  1) Thoái hóa (evaporation): giảm pheromone hiện tại theo evaporationRate để tránh bão hòa.
+    //  2) Phân bố (deposit): kiến đã đến thức ăn sẽ đóng góp pheromone theo tỉ lệ nghịch với tổng
+    //     khoảng cách đã đi (đường tốt ngắn hơn đóng góp nhiều hơn).
+    // Cách đóng góp chi tiết:
+    //  - Với mỗi kiến đã reached food, tính contribution = pheromoneDeposit / ant.totalDistance.
+    //  - Duyệt các cặp liên tiếp visitedNodes của kiến và cộng contribution cho cạnh tương ứng.
+    // Sau đó, clamp pheromone tối thiểu để tránh về 0.
+    // === End highlighted description ===
     fun updatePheromones(ants: List<Ant>) {
         edges.forEach { it.pheromone *= (1.0 - evaporationRate) }
         ants.filter { it.hasReachedFood }.forEach { ant ->
@@ -178,6 +237,17 @@ fun ACOVisualizationApp() {
         firstNodeForEdge = null
     }
 
+    // === startSimulation ===
+    // Mục tiêu: Khởi tạo và điều khiển vòng lặp mô phỏng ACO chạy trong coroutine.
+    // Công dụng:
+    // - Kiểm tra điều kiện khởi chạy (nestId, foodId, edges).
+    // - Tạo một tập các Ant ban đầu từ nestId.
+    // - Lặp nhiều iteration: cho mỗi kiến chọn node tiếp theo (dùng ACOAlgorithm.findNextNode),
+    //   cập nhật vị trí/animation, kiểm tra điều kiện dừng (đạt food hoặc maxSteps).
+    // - Sau mỗi iteration, cập nhật pheromone (ACOAlgorithm.updatePheromones) và cập nhật
+    //   bestPath/bestDistance nếu tìm được đường tốt hơn.
+    // Lưu ý: Hàm này chứa phần logic mô phỏng thực tế (không chỉ UI) nên được chú thích rõ ràng.
+    // === End highlighted description ===
     fun startSimulation() {
         if (nestId == null || foodId == null || edges.isEmpty()) return
 
