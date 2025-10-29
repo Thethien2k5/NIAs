@@ -35,7 +35,7 @@ Dự án này cung cấp một công cụ trực quan để hiểu rõ hơn về
 - **Hiệu ứng hình ảnh** mượt mà thể hiện sự di chuyển của các particle.
 - [Xem video](https://youtube.com/shorts/hGUfF_VW47I?si=jo_siO_SQvqiN0T7).
 
-### 3. ACO - Thuật toán Kiến / Ant Colony Optimization
+### 3. ACO - Tối ưu hóa Đàn Kiến / Ant Colony Optimization
 - **Giao diện đồ họa tương tác** để xây dựng đồ thị.
 - **Tùy chỉnh linh hoạt:** Số lượng đỉnh, kết nối cạnh, vị trí tổ và thức ăn.
 - **Trực quan hóa** sự hình thành "mùi hương" (pheromone) trên các cạnh.
